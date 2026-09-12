@@ -28,10 +28,24 @@ void inicializarDisplay() {
 void atualizarStatusTela(String mensagem) {
     display.clearDisplay();
     display.setTextSize(1);
-    display.setCursor(10, 28);
+    
+    // Variáveis para armazenar as dimensões do texto retornado pela biblioteca
+    int16_t x1, y1;
+    uint16_t larguraTexto, alturaTexto;
+    
+    // Calcula o tamanho exato que a string vai ocupar na tela
+    display.getTextBounds(mensagem, 0, 0, &x1, &y1, &larguraTexto, &alturaTexto);
+    
+    // Calcula as coordenadas para centralizar o texto perfeitamente (128x64)
+    int posX = (LARGURA_TELA - larguraTexto) / 2;
+    int posY = (ALTURA_TELA - alturaTexto) / 2;
+    
+    // Configura a posição e imprime
+    display.setCursor(posX, posY);
     display.print(mensagem);
     display.display();
 }
+
 
 void exibirQRCode(String url) {
     QRCode qrcode;
