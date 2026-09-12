@@ -40,40 +40,44 @@ int8_t inicializarNFC(void) {
 // Retornos: 1 (Nova TAG lida), 0 (Nenhuma TAG no campo), -1 (Erro de hardware)
 // ============================================================================
 int8_t lerTagNFC(TagNfc *tagSaida) {
-    // Programação defensiva: impede acesso a ponteiros nulos
     if (tagSaida == NULL) return -1;
 
-    // Teste preventivo no registrador de versão para detectar se o leitor foi desconectado
+    // Teste de integridade do hardware
     byte versao = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
+    
+    // Se o leitor travou devido ao acionamento do relé (retornando 0x00 ou 0xFF), força o re-init do RFID
     if (versao == 0x00 || versao == 0xFF) {
-        return -1; // Retorna erro de comunicação
+        mfrc522.PCD_Init();
+        delay(50);
+        versao = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
+        if (versao == 0x00 || versao == 0xFF) {
+            return -1; // Leitor realmente desconectado
+        }
     }
 
-    // Checagem não-bloqueante: verifica se há um novo cartão no campo de indução
+    // Checa se há uma nova tag no campo
     if (!mfrc522.PICC_IsNewCardPresent()) {
-        return 0; // Nenhuma tag detectada no momento
+        return 0;
     }
 
-    // Tenta efetuar a leitura dos bytes seriais (UID) da tag selecionada
+    // Tenta ler o código serial da tag
     if (!mfrc522.PICC_ReadCardSerial()) {
-        return 0; // Tag presente, mas falhou ao extrair o código serial
+        return 0;
     }
 
-    // Limita a quantidade de bytes lidos ao tamanho máximo seguro do buffer interno
     uint8_t tamanhoLido = mfrc522.uid.size;
     if (tamanhoLido > TAMANHO_MAXIMO_UID) {
         tamanhoLido = TAMANHO_MAXIMO_UID;
     }
 
-    // Armazena a dimensão do UID e copia o array de bytes bruto para a estrutura de saída
     tagSaida->tamanho = tamanhoLido;
     memcpy(tagSaida->bytes, mfrc522.uid.uidByte, tamanhoLido);
 
-    // Envia comandos de repouso para interromper a transmissão e evitar leituras duplicadas continuas
-    mfrc522.PICC_HaltA();       // Coloca o cartão em modo sleep
-    mfrc522.PCD_StopCrypto1();  // Desativa a criptografia na comunicação SPI
+    // Encerra a comunicação da tag e reseta a criptografia do chip
+    mfrc522.PICC_HaltA();
+    mfrc522.PCD_StopCrypto1();
 
-    return 1; // Nova tag capturada com sucesso
+    return 1;
 }
 
 // ============================================================================

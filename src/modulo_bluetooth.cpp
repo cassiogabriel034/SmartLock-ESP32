@@ -144,8 +144,21 @@ int bt_ler_entradas(ConfigSistema *configs) {
 int bt_desligar(void) {
     if (!btInicializado) return 1;
 
-    SerialBT.end(); // Encerra o stack Bluetooth no sistema operacional
+    Serial.println(F("[BT] Encerrando conexões ativas..."));
+
+    // 1. Garante a entrega de todas as mensagens pendentes no buffer
+    SerialBT.flush();
+
+    // 2. Se houver um celular conectado, desconecta antes de destruir a pilha
+    if (SerialBT.hasClient()) {
+        SerialBT.disconnect();
+        delay(300); // Tempo para o Core 0 (Bluedroid) processar o fechamento do socket
+    }
+
+    // 3. Finaliza o driver e desaloca a memória RAM
+    SerialBT.end();
     btInicializado = false;
-    Serial.println(F("[BT] Modulo desligado."));
+
+    Serial.println(F("[BT] Módulo desligado com sucesso."));
     return 1; // Sucesso
 }

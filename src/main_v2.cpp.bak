@@ -1,0 +1,106 @@
+#include <Arduino.h>
+#include "config.h"
+#include "config_structs.h"
+#include "modulo_nfc.h"
+#include "modulo_bluetooth.h"
+#include "modulo_display.h"
+
+// Instâncias globais de controle
+TagNfc tagLida;
+ConfigSistema configs;
+
+#define PINO_RELE PINO_RELE_TRAVA
+
+// Máquina de estados simplificada (Sem Wi-Fi)
+enum EstadoSistema { 
+    SETUP_BLUETOOTH, 
+    MODO_OPERACIONAL 
+};
+
+EstadoSistema estadoAtual = SETUP_BLUETOOTH;
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+
+    pinMode(PINO_RELE, OUTPUT);
+    digitalWrite(PINO_RELE, LOW);
+
+    Serial.println(F("\n=============================================="));
+    Serial.println(F("  SISTEMA SMART LOCK - TESTE DISPLAY & NFC    "));
+    Serial.println(F("=============================================="));
+
+    // 1. Inicializa o Display OLED (SDA: GPIO 21 | SCL: GPIO 22)
+    inicializarDisplay();
+    atualizarStatusTela("Iniciando...");
+
+    // 2. Inicializa o Leitor NFC / RFID (SS: GPIO 5 | RST: GPIO 27)
+    if (inicializarNFC() == 1) {
+        Serial.println(F("[NFC] Hardware MFRC522 detectado com sucesso."));
+    } else {
+        Serial.println(F("[NFC] ERRO: Falha no MFRC522! Verifique as conexões SPI."));
+        atualizarStatusTela("ERRO: NFC SPI");
+        delay(2000);
+    }
+
+    // 3. Inicializa o Bluetooth SPP
+    if (bt_inicializar("SmartLock-Setup") == 1) {
+        Serial.println(F("[BT] Rádio ativo. Pareie e envie as configurações."));
+        atualizarStatusTela("BT: Aguardando...");
+    }
+}
+
+void loop() {
+    switch (estadoAtual) {
+        // --------------------------------------------------------------------
+        // ETAPA 1: Setup exclusivo via Bluetooth
+        // --------------------------------------------------------------------
+        case SETUP_BLUETOOTH: {
+            if (bt_verificar_conexao() == 1) {
+                int statusBt = bt_ler_entradas(&configs);
+
+                if (statusBt == 1) {
+                    Serial.println(F("[BT] Dados recebidos!"));
+                    atualizarStatusTela("BT: Recebido!");
+                } 
+                // Encerra ao receber SALVAR_FIM
+                else if (statusBt == 2 || configs.configurado) {
+                    Serial.println(F("\n[BT] Recebido 'SALVAR_FIM'. Desligando Bluetooth..."));
+                    atualizarStatusTela("BT Desligando...");
+                    
+                    bt_desligar(); // Desconecta e desliga o rádio com segurança
+
+                    Serial.println(F("[SISTEMA] Transição para Modo Operacional (NFC Ativo)."));
+                    atualizarStatusTela("Aproxime a Tag");
+                    
+                    estadoAtual = MODO_OPERACIONAL; // Avança direto para leitura NFC
+                }
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------
+        // ETAPA 2: Modo Operacional (Leitura NFC e Exibição na Tela)
+        // --------------------------------------------------------------------
+        case MODO_OPERACIONAL: {
+            if (lerTagNFC(&tagLida) == 1) {
+                char bufferUid[30];
+                formatarUidTexto(&tagLida, bufferUid);
+
+                Serial.print(F("\n[NFC] Tag Detectada! UID: "));
+                Serial.println(bufferUid);
+
+                // Exibe o UID lido na tela OLED por 2.5 segundos
+                atualizarStatusTela(String("UID:\n") + bufferUid);
+                digitalWrite(PINO_RELE, LOW);
+                
+                delay(2500);
+
+                // Retorna a mensagem padrão aguardando a próxima tag
+                atualizarStatusTela("Aproxime a Tag");
+                digitalWrite(PINO_RELE, HIGH);
+            }
+            break;
+        }
+    }
+}

@@ -1,0 +1,139 @@
+#include <Arduino.h>
+#include "config.h"
+#include "config_structs.h"
+#include "modulo_nfc.h"
+#include "modulo_bluetooth.h"
+#include "modulo_wifi.h"
+
+#define PINO_RELE PINO_RELE_TRAVA // GPIO 17
+
+// Instâncias globais de controle
+TagNfc tagLida;
+ConfigSistema configs;
+
+// Máquina de estados para garantir o fluxo sequencial
+enum EstadoSistema { 
+    SETUP_BLUETOOTH, 
+    PERGUNTA_WIFI, 
+    MODO_OPERACIONAL 
+};
+
+EstadoSistema estadoAtual = SETUP_BLUETOOTH;
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+
+    Serial.println(F("\n=============================================="));
+    Serial.println(F("  SISTEMA SMART LOCK - INICIALIZACAO          "));
+    Serial.println(F("=============================================="));
+
+    // 1. Configuração e teste inicial do Relé (GPIO 17)
+    pinMode(PINO_RELE, OUTPUT);
+    digitalWrite(PINO_RELE, LOW);
+
+    Serial.println(F("[TESTE] Disparando pulso de teste no Relé..."));
+    digitalWrite(PINO_RELE, HIGH);
+    delay(500);
+    digitalWrite(PINO_RELE, LOW);
+    Serial.println(F("[TESTE] Relé respondeu com sucesso!"));
+
+    // 2. Inicialização do Leitor NFC / RFID
+    if (inicializarNFC() == 1) {
+        Serial.println(F("[NFC] Hardware MFRC522 detectado."));
+    } else {
+        Serial.println(F("[NFC] ERRO: Falha no MFRC522! Verifique as conexões SPI."));
+    }
+
+    // 3. Inicialização do Bluetooth Real (SPP)
+    if (bt_inicializar("SmartLock-Setup") == 1) {
+        Serial.println(F("[BT] Rádio ativo. Pareie o aplicativo e envie as configurações."));
+    }
+}
+
+void loop() {
+    switch (estadoAtual) {
+        // --------------------------------------------------------------------
+        // ETAPA 1: Processamento exclusivo do Bluetooth
+        // --------------------------------------------------------------------
+        case SETUP_BLUETOOTH: {
+            if (bt_verificar_conexao() == 1) {
+                int statusBt = bt_ler_entradas(&configs);
+
+                if (statusBt == 1) {
+                    Serial.println(F("[BT] Comando de configuração recebido com sucesso!"));
+                } 
+                // Encerra ao receber SALVAR_FIM ou quando configs.configurado for true
+                else if (statusBt == 2 || configs.configurado) {
+                    Serial.println(F("\n[BT] Recebido 'SALVAR_FIM'. Desligando Bluetooth permanentemente..."));
+                    bt_desligar(); // Desliga o rádio Bluetooth e libera RAM
+
+                    Serial.println(F("\n=============================================="));
+                    Serial.println(F("[SISTEMA] Configuração via Bluetooth finalizada."));
+                    Serial.println(F("[Wi-Fi] Deseja conectar à rede configurada agora?"));
+                    Serial.println(F("Digite 's' (SIM) ou 'n' (NAO) no Terminal Serial e pressione Enter:"));
+                    Serial.println(F("=============================================="));
+
+                    estadoAtual = PERGUNTA_WIFI; // Avança para a próxima etapa
+                }
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------
+        // ETAPA 2: Pergunta interativa sobre Wi-Fi via Terminal Serial
+        // --------------------------------------------------------------------
+        case PERGUNTA_WIFI: {
+            if (Serial.available() > 0) {
+                char resposta = Serial.read();
+
+                if (resposta == 's' || resposta == 'S') {
+                    Serial.println(F("\n[Wi-Fi] Opcao 'SIM' selecionada."));
+
+                    if (strlen(configs.wifi.ssid) > 0) {
+                        Serial.println(F("[Wi-Fi] Tentando conectar à rede..."));
+                        if (wifi_conectar_ip_fixo(&configs.wifi) == 1) {
+                            Serial.println(F("[Wi-Fi] Conectado e IP Fixo atribuído com sucesso!"));
+                        } else {
+                            Serial.println(F("[Wi-Fi] Falha na conexão com o roteador."));
+                        }
+                    } else {
+                        Serial.println(F("[Wi-Fi] Erro: Nenhuma credencial de Wi-Fi foi enviada via BT!"));
+                    }
+
+                    Serial.println(F("\n[SISTEMA] Transição concluída. NFC Liberado e ativo!"));
+                    estadoAtual = MODO_OPERACIONAL;
+                } 
+                else if (resposta == 'n' || resposta == 'N') {
+                    Serial.println(F("\n[Wi-Fi] Opcao 'NAO' selecionada. Conexão ignorada."));
+                    Serial.println(F("[SISTEMA] Transição concluída. NFC Liberado e ativo!"));
+                    estadoAtual = MODO_OPERACIONAL;
+                }
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------
+        // ETAPA 3: Modo Operacional (NFC ativo para controle da trava)
+        // --------------------------------------------------------------------
+        case MODO_OPERACIONAL: {
+            if (lerTagNFC(&tagLida) == 1) {
+                char bufferUid[30];
+                formatarUidTexto(&tagLida, bufferUid);
+
+                Serial.print(F("\n[NFC] Tag detectada! UID: "));
+                Serial.println(bufferUid);
+
+                // Acionamento do relé da trava por 2 segundos
+                Serial.println(F("[TRAVA] >>> LIBERANDO ACESSO (RELÉ LIGADO) <<<"));
+                digitalWrite(PINO_RELE, HIGH);
+                delay(2000);
+                digitalWrite(PINO_RELE, LOW);
+                Serial.println(F("[TRAVA] >>> FECHANDO TRAVA (RELÉ DESLIGADO) <<<"));
+
+                delay(100); // Pausa de estabilização pós-pico de tensão do relé            }
+            break;
+        }
+    }
+    }
+}

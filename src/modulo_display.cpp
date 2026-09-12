@@ -17,8 +17,11 @@ void inicializarDisplay() {
         for (;;); // Bloqueia a execução por segurança
     }
     
+    
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
+    // Gira a orientação da tela em 180° (Corrige a exibição de cabeça para baixo)
+    display.setRotation(2);
     display.display();
 }
 
