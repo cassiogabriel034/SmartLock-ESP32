@@ -5,6 +5,7 @@
 #include "modulo_bluetooth.h"
 #include "modulo_display.h"
 #include "modulo_botoes.h"
+#include "modulo_porta.h"
 
 // Objetos e Variáveis Globais
 TagNfc tagLida;
@@ -67,11 +68,8 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
-    // Inicialização dos Pinos Digitais (LED no GPIO 17 e Sensor no GPIO 4)
-    pinMode(PINO_RELE_TRAVA, OUTPUT);
-    digitalWrite(PINO_RELE_TRAVA, LOW); // Garante LED desligado no boot
-
-    pinMode(PINO_FIM_DE_CURSO, INPUT_PULLUP);
+    // Inicialização do hardware da porta (Trava e Sensor Fim de Curso)
+    inicializarPorta();
 
     // Inicializa o botão no GPIO 13
     botao_inicializar(&btnNavegacao, PINO_BOTAO_VERDE);
@@ -156,10 +154,10 @@ void loop() {
                 Serial.print(F("[NFC] Tag Detectada! UID: "));
                 Serial.println(bufferUid);
 
-                // Liga o LED no GPIO 17 (Simulando o acionamento da trava/relé)
-                digitalWrite(PINO_RELE_TRAVA, HIGH);
+                // Aciona a trava utilizando o módulo da porta
+                abrirPorta();
 
-                Serial.println(F("[ATUADOR] LED (GPIO 17) LIGADO - Trava Aberta!"));
+                Serial.println(F("[ATUADOR] Trava Solenóide / LED LIGADO!"));
                 atualizarStatusTela(String("Tag Lida!\n") + bufferUid + "\nLED: LIGADO", fonte_tela);
 
                 estadoAtual = TRAVA_ABERTA;
@@ -176,13 +174,13 @@ void loop() {
                 atualizarStatusTela("Status: LED LIGADO\nPresione FimCurso", fonte_tela);
             }
 
-            // Pressionar a Chave Fim de Curso no GPIO 4 (Nível Lógico LOW)
-            if (digitalRead(PINO_FIM_DE_CURSO) == LOW) {
-                // Desliga o LED no GPIO 17
-                digitalWrite(PINO_RELE_TRAVA, LOW);
+            // Verifica se a porta foi fechada (Chave Fim de Curso Pressionada / LOW)
+            if (estaPortaFechada()) {
+                // Desliga o relé da trava utilizando o módulo da porta
+                fecharPorta();
 
                 Serial.println(F("[SENSOR] Fim de Curso acionado (GPIO 4)!"));
-                Serial.println(F("[ATUADOR] LED (GPIO 17) DESLIGADO - Trava Fechada."));
+                Serial.println(F("[ATUADOR] Trava DESLIGADA."));
 
                 atualizarStatusTela("Porta Fechada!\nLED Desligado", fonte_tela);
                 delay(1500);
