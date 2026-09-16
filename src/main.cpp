@@ -19,6 +19,8 @@ enum EstadoSistema {
     TRAVA_ABERTA 
 };
 
+#define fonte_tela 2
+
 EstadoSistema estadoAtual = SETUP_BLUETOOTH;
 uint8_t paginaAtual = 0;
 
@@ -39,22 +41,22 @@ void imprimirConfigsTerminal() {
 void exibirPaginaConfig(uint8_t pagina) {
     switch (pagina) {
         case 0:
-            atualizarStatusTela("Setup Concluido!\n\nBtn GPIO13: Avançar");
+            atualizarStatusTela("Setup Concluido!\n\nBtn GPIO13: Avançar", fonte_tela);
             break;
         case 1:
-            atualizarStatusTela(String("[1/5] SSID Wi-Fi:\n") + configs.wifi.ssid);
+            atualizarStatusTela(String("[1/5] SSID Wi-Fi:\n") + configs.wifi.ssid, fonte_tela);
             break;
         case 2:
-            atualizarStatusTela(String("[2/5] Senha Wi-Fi:\n") + configs.wifi.password);
+            atualizarStatusTela(String("[2/5] Senha Wi-Fi:\n") + configs.wifi.password, fonte_tela);
             break;
         case 3:
-            atualizarStatusTela(String("[3/5] IP Estatico:\n") + configs.wifi.ipEstatico);
+            atualizarStatusTela(String("[3/5] IP Estatico:\n") + configs.wifi.ipEstatico, fonte_tela);
             break;
         case 4:
-            atualizarStatusTela(String("[4/5] Link API:\n") + configs.apiLink);
+            atualizarStatusTela(String("[4/5] Link API:\n") + configs.apiLink, fonte_tela);
             break;
         case 5:
-            atualizarStatusTela(String("[5/5] Dash User:\n") + configs.dashboard.usuario);
+            atualizarStatusTela(String("[5/5] Dash User:\n") + configs.dashboard.usuario, fonte_tela);
             break;
         default:
             break;
@@ -76,20 +78,20 @@ void setup() {
 
     // Inicializa periféricos de display e leitor NFC
     inicializarDisplay();
-    atualizarStatusTela("Iniciando...");
+    atualizarStatusTela("Iniciando...", fonte_tela);
 
     if (inicializarNFC() == 1) {
         Serial.println(F("[NFC] Hardware inicializado."));
     } else {
         Serial.println(F("[NFC] ERRO de comunicação SPI!"));
-        atualizarStatusTela("ERRO: NFC SPI");
+        atualizarStatusTela("ERRO: NFC SPI", fonte_tela);
         delay(2000);
     }
 
     // Inicializa o Bluetooth SPP
     if (bt_inicializar("SmartLock-Setup") == 1) {
         Serial.println(F("[BT] Aguardando envio de configuracoes..."));
-        atualizarStatusTela("BT: Aguardando...");
+        atualizarStatusTela("BT: Aguardando...", fonte_tela);
     }
 }
 
@@ -103,7 +105,7 @@ void loop() {
                 int statusBt = bt_ler_entradas(&configs);
 
                 if (statusBt == 1) {
-                    atualizarStatusTela("BT: Dado Recebido");
+                    atualizarStatusTela("BT: Dado Recebido", fonte_tela);
                 } 
                 else if (statusBt == 2 || configs.configurado) {
                     // Imprime o relatório completo de uma só vez no Terminal
@@ -129,7 +131,7 @@ void loop() {
                 paginaAtual++;
                 if (paginaAtual > 5) {
                     Serial.println(F("[SISTEMA] Leitura NFC Liberada!"));
-                    atualizarStatusTela("Aproxime a Tag");
+                    atualizarStatusTela("Aproxime a Tag", fonte_tela);
                     estadoAtual = MODO_OPERACIONAL;
                 } else {
                     exibirPaginaConfig(paginaAtual);
@@ -144,7 +146,7 @@ void loop() {
         case MODO_OPERACIONAL: {
             // Permite resetar a mensagem da tela pressionando o botão 13
             if (botao_verificar_clique(&btnNavegacao) == 1) {
-                atualizarStatusTela("Aproxime a Tag");
+                atualizarStatusTela("Aproxime a Tag", fonte_tela);
             }
 
             if (lerTagNFC(&tagLida) == 1) {
@@ -158,7 +160,7 @@ void loop() {
                 digitalWrite(PINO_RELE_TRAVA, HIGH);
 
                 Serial.println(F("[ATUADOR] LED (GPIO 17) LIGADO - Trava Aberta!"));
-                atualizarStatusTela(String("Tag Lida!\n") + bufferUid + "\nLED: LIGADO");
+                atualizarStatusTela(String("Tag Lida!\n") + bufferUid + "\nLED: LIGADO", fonte_tela);
 
                 estadoAtual = TRAVA_ABERTA;
             }
@@ -171,7 +173,7 @@ void loop() {
         case TRAVA_ABERTA: {
             // O botão 13 exibe o status atual do atuador se pressionado
             if (botao_verificar_clique(&btnNavegacao) == 1) {
-                atualizarStatusTela("Status: LED LIGADO\nPresione FimCurso");
+                atualizarStatusTela("Status: LED LIGADO\nPresione FimCurso", fonte_tela);
             }
 
             // Pressionar a Chave Fim de Curso no GPIO 4 (Nível Lógico LOW)
@@ -182,10 +184,10 @@ void loop() {
                 Serial.println(F("[SENSOR] Fim de Curso acionado (GPIO 4)!"));
                 Serial.println(F("[ATUADOR] LED (GPIO 17) DESLIGADO - Trava Fechada."));
 
-                atualizarStatusTela("Porta Fechada!\nLED Desligado");
+                atualizarStatusTela("Porta Fechada!\nLED Desligado", fonte_tela);
                 delay(1500);
 
-                atualizarStatusTela("Aproxime a Tag");
+                atualizarStatusTela("Aproxime a Tag", fonte_tela);
                 estadoAtual = MODO_OPERACIONAL;
             }
             break;

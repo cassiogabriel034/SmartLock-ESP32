@@ -17,7 +17,6 @@ void inicializarDisplay() {
         for (;;); // Bloqueia a execução por segurança
     }
     
-    
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     // Gira a orientação da tela em 180° (Corrige a exibição de cabeça para baixo)
@@ -25,27 +24,35 @@ void inicializarDisplay() {
     display.display();
 }
 
-void atualizarStatusTela(String mensagem) {
+void testarPixelsTela() {
+    // Preenche todo o buffer da tela com pixels acesos
+    display.fillScreen(SSD1306_WHITE);
+    display.display();
+}
+
+void atualizarStatusTela(String mensagem, uint8_t tamanhoFonte) {
     display.clearDisplay();
-    display.setTextSize(1);
+    display.setTextSize(tamanhoFonte);
     
-    // Variáveis para armazenar as dimensões do texto retornado pela biblioteca
+    // Variáveis para armazenar as dimensões do texto
     int16_t x1, y1;
     uint16_t larguraTexto, alturaTexto;
     
-    // Calcula o tamanho exato que a string vai ocupar na tela
+    // Calcula o tamanho exato que a string vai ocupar com o tamanho de fonte informado
     display.getTextBounds(mensagem, 0, 0, &x1, &y1, &larguraTexto, &alturaTexto);
     
-    // Calcula as coordenadas para centralizar o texto perfeitamente (128x64)
+    // Calcula as coordenadas para centralizar o texto (128x64)
     int posX = (LARGURA_TELA - larguraTexto) / 2;
     int posY = (ALTURA_TELA - alturaTexto) / 2;
     
-    // Configura a posição e imprime
+    // Evita posições negativas caso o texto seja maior que a tela
+    if (posX < 0) posX = 0;
+    if (posY < 0) posY = 0;
+    
     display.setCursor(posX, posY);
     display.print(mensagem);
     display.display();
 }
-
 
 void exibirQRCode(String url) {
     QRCode qrcode;

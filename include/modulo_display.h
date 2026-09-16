@@ -10,10 +10,16 @@
 void inicializarDisplay();
 
 /**
- * @brief Exibe uma mensagem de texto simples centralizada no display.
+ * @brief Exibe uma mensagem de texto centralizada no display com tamanho de fonte ajustável.
  * @param mensagem Texto a ser renderizado na tela.
+ * @param tamanhoFonte Tamanho do texto (padrão = 1 caso não seja informado).
  */
-void atualizarStatusTela(String mensagem);
+void atualizarStatusTela(String mensagem, uint8_t tamanhoFonte = 1);
+
+/**
+ * @brief Preenche toda a tela com cor ativa para detectar linhas mortas (pixels queimados).
+ */
+void testarPixelsTela();
 
 /**
  * @brief Gera e renderiza um QR Code centralizado na tela OLED.
