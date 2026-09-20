@@ -1,0 +1,109 @@
+#include <Arduino.h>
+#include "config.h"
+#include "config_structs.h"
+#include "modulo_nfc.h"
+#include "modulo_display.h"
+#include "modulo_botoes.h"
+#include "modulo_porta.h"
+
+// Variáveis e Estruturas Globais
+TagNfc tagLida;
+
+// Instância dos Botões
+Botao btnBranco;   // GPIO 15 (LIGAR MANUALLY)
+Botao btnVermelho; // GPIO 4  (DESLIGAR MANUALLY)
+Botao btnAzul;     // GPIO 18 (STATUS NA TELA)
+
+#define FONTE_TELA 2
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+
+    // 1. Inicializa Atuadores e Sensores da Porta
+    inicializarPorta();
+
+    // 2. Inicializa os Botões
+    botao_inicializar(&btnBranco, PINO_BOTAO_VERDE);
+    botao_inicializar(&btnVermelho, PINO_BOTAO_VERMELHO);
+    botao_inicializar(&btnAzul, PINO_BOTAO_AZUL);
+
+    // 3. Inicializa Tela OLED[cite: 15]
+    inicializarDisplay();
+    atualizarStatusTela("Iniciando...", FONTE_TELA);
+
+    // 4. Inicializa o Leitor NFC
+    if (inicializarNFC() == 1) {
+        Serial.println(F("[NFC] Leitor inicializado com sucesso."));
+        atualizarStatusTela("Aproxime a Tag", FONTE_TELA);
+    } else {
+        Serial.println(F("[NFC] Erro de conexao SPI."));
+        atualizarStatusTela("ERRO: NFC SPI", FONTE_TELA);
+        delay(2000);
+    }
+
+    Serial.println(F("[SISTEMA] Pronto para uso."));
+}
+
+void loop() {
+    // ------------------------------------------------------------------------
+    // FLUXO 1: LEITURA DO NFC -> LIGA O LED (MODO LIGADO)
+    // ------------------------------------------------------------------------
+    if (lerTagNFC(&tagLida) == 1) {
+        char bufferUid[30];
+        formatarUidTexto(&tagLida, bufferUid);
+
+        Serial.print(F("[NFC] Tag lida: "));
+        Serial.println(bufferUid);
+
+        // Ativa o relé / Liga o LED
+        abrirPorta();
+
+        atualizarStatusTela(String("Tag\n") + bufferUid, FONTE_TELA);
+        delay(1200);
+        atualizarStatusTela("LED:LIGADO\nPres. FimCurso", FONTE_TELA);
+    }
+
+    // ------------------------------------------------------------------------
+    // FLUXO 2: CHAVE FIM DE CURSO -> DESLIGA O LED (MODO DESLIGADO)
+    // ------------------------------------------------------------------------
+    // Só processa o fim de curso se o LED estiver atualmente LIGADO
+    if (obterEstadoTrava() && estaPortaFechada()) {
+        // Desativa o relé / Desliga o LED
+        fecharPorta();
+
+        Serial.println(F("[SENSOR] Fim de curso acionado -> LED Desligado."));
+        atualizarStatusTela("LED: DESLIGADO!", FONTE_TELA);
+        delay(1500);
+        atualizarStatusTela("Aproxime a Tag", FONTE_TELA);
+    }
+
+    // ------------------------------------------------------------------------
+    // FLUXO 3: AÇÕES DOS BOTÕES MANUAIS
+    // ------------------------------------------------------------------------
+
+    // Botão Branco: Força Ligar o LED
+    if (botao_verificar_clique(&btnBranco) == 1) {
+        abrirPorta();
+        atualizarStatusTela("LED: LIGADO", FONTE_TELA);
+        Serial.println(F("[MANUAL] LED Ligado via Botão Branco."));
+    }
+
+    // Botão Vermelho: Força Desligar o LED
+    if (botao_verificar_clique(&btnVermelho) == 1) {
+        fecharPorta();
+        atualizarStatusTela("LED: DESLIGADO", FONTE_TELA);
+        Serial.println(F("[MANUAL] LED Desligado via Botão Vermelho."));
+    }
+
+    // Botão Azul: Testa a tela exibindo os status atuais
+    if (botao_verificar_clique(&btnAzul) == 1) {
+        String statusMsg = "LED: ";
+        statusMsg += obterEstadoTrava() ? "LIGADO\n" : "DESLIGADO\n";
+        statusMsg += "Porta: ";
+        statusMsg += estaPortaFechada() ? "FECHADA" : "ABERTA";
+
+        atualizarStatusTela(statusMsg, 1);
+        Serial.println(F("[STATUS] Dados atualizados no display."));
+    }
+}
