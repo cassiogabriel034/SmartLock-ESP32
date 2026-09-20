@@ -10,7 +10,6 @@
       "left": 127.6,
       "attrs": { "color": "#eeefed" }
     },
-    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": -9.6, "left": -71.96, "attrs": {} },
     { "type": "board-mfrc522", "id": "rfid1", "top": -146.65, "left": 195.44, "attrs": {} },
     {
       "type": "board-ssd1306",
@@ -36,7 +35,7 @@
       "top": 57.5,
       "left": 483.5,
       "rotate": 90,
-      "attrs": { "color": "blue", "xray": "1" }
+      "attrs": { "color": "white", "xray": "1" }
     },
     {
       "type": "wokwi-pushbutton",
@@ -44,7 +43,7 @@
       "top": 95.9,
       "left": 541.1,
       "rotate": 90,
-      "attrs": { "color": "green", "xray": "1" }
+      "attrs": { "color": "blue", "xray": "1" }
     },
     {
       "type": "wokwi-pushbutton",
@@ -61,60 +60,54 @@
       "left": 344.2,
       "rotate": 180,
       "attrs": { "value": "1000" }
-    }
+    },
+    { "type": "board-esp32-devkit-c-v4", "id": "esp1", "top": 0, "left": -33.56, "attrs": {} }
   ],
   "connections": [
-    [ "esp:TX", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX", "$serialMonitor:TX", "", [] ],
-    [ "esp:3V3", "bb1:tp.1", "green", [ "h-14.21", "v-38.4", "h171.2" ] ],
-    [ "esp:5V", "bb1:bp.1", "red", [ "h-14.21", "v19.2", "h124.8", "v-27.9" ] ],
-    [ "esp:GND.1", "bb1:bn.1", "black", [ "h-19.05", "v76.8", "h134.4", "v-17.9" ] ],
     [ "bb1:bn.25", "bb1:tn.25", "black", [ "h30.4", "v-174" ] ],
     [ "rfid1:3.3V", "bb1:tp.2", "green", [ "h0" ] ],
     [ "rfid1:GND", "bb1:tn.3", "black", [ "h0" ] ],
-    [ "rfid1:SDA", "esp:5", "blue", [ "h-153.6", "v211.2" ] ],
-    [ "rfid1:SCK", "esp:18", "gray", [ "h-144", "v192" ] ],
-    [ "rfid1:MISO", "esp:19", "white", [ "h-134.4", "v163.2" ] ],
-    [ "rfid1:MOSI", "esp:23", "orange", [ "h-124.8", "v115.2" ] ],
-    [ "rfid1:RST", "esp:27", "purple", [ "h-288", "v163.2" ] ],
     [ "bb1:tn.4", "bb1:4t.d", "black", [ "v9.5", "h-8" ] ],
     [ "bb1:5t.c", "bb1:bp.2", "red", [ "h-67.2", "v105.6", "h46.4" ] ],
-    [ "bb1:6t.b", "esp:22", "gold", [ "h-96", "v-28.8" ] ],
-    [ "bb1:7t.a", "esp:21", "cyan", [ "h-115.2", "v9.6" ] ],
     [ "relay1:VCC", "bb1:bp.3", "red", [ "v-47.1" ] ],
     [ "relay1:GND", "bb1:bn.5", "black", [ "h0" ] ],
-    [ "relay1:IN", "esp:17", "#8f4814", [ "h-144", "v-134.6" ] ],
     [ "relay1:COM", "bb1:bp.18", "red", [ "h0" ] ],
     [ "bb1:bn.15", "bb1:18b.j", "black", [ "v0" ] ],
     [ "bb1:19t.e", "relay1:NO", "orange", [ "v86.4", "h38.4", "v78.6" ] ],
-    [ "bb1:14t.e", "esp:4", "magenta", [ "v9.6", "h-182.4", "v28.8" ] ],
     [ "btn1:1.l", "bb1:tn.24", "black", [ "v-9.6", "h-107.2" ] ],
     [ "btn2:1.l", "btn1:1.l", "black", [ "v0" ] ],
     [ "btn3:1.l", "btn2:1.l", "black", [ "h19.2", "v19.2", "h67.2", "v-76.8" ] ],
-    [ "btn1:2.l", "esp:12", "blue", [ "h-19.4", "v230.4", "h-585.6", "v-144" ] ],
-    [
-      "btn2:2.l",
-      "esp:13",
-      "green",
-      [ "h-19.4", "v38.4", "h-67.2", "v163.2", "h-585.6", "v-134.4" ]
-    ],
-    [ "btn3:2.l", "esp:14", "red", [ "h-38.6", "v153.6", "h-585.6", "v-172.8" ] ],
     [ "bb1:tp.9", "sw1:1", "green", [ "v0" ] ],
-    [ "oled1:GND", "bb1:4t.e", "", [ "$bb" ] ],
-    [ "oled1:VCC", "bb1:5t.e", "", [ "$bb" ] ],
-    [ "oled1:SCL", "bb1:6t.e", "", [ "$bb" ] ],
-    [ "oled1:SDA", "bb1:7t.e", "", [ "$bb" ] ],
+    [ "bb1:14t.d", "r2:2", "magenta", [ "h19.2", "v-38.4", "h46.8" ] ],
+    [ "r2:1", "bb1:tn.22", "black", [ "v0" ] ],
+    [ "bb1:bp.1", "esp1:5V", "red", [ "h-36.8", "v27.9", "h-134.55" ] ],
+    [ "bb1:bn.1", "esp1:GND.3", "black", [ "h-65.6", "v-116.5" ] ],
+    [ "bb1:6t.b", "esp1:17", "#8f4814", [ "h-86.4", "v57.6" ] ],
+    [ "bb1:7t.a", "esp1:16", "orange", [ "h-105.6", "v76.8" ] ],
+    [ "bb1:tp.1", "esp1:3V3", "green", [ "v-28.5", "h-190.55" ] ],
+    [ "rfid1:SDA", "esp1:26", "gold", [ "h-48", "v48", "h-192", "v172.8" ] ],
+    [ "esp1:27", "rfid1:SCK", "blue", [ "h-19.05", "v-220.8" ] ],
+    [ "esp1:14", "rfid1:MOSI", "violet", [ "h-28.65", "v-220.8" ] ],
+    [ "esp1:12", "rfid1:MISO", "purple", [ "h-38.25", "v-220.8" ] ],
+    [ "esp1:13", "rfid1:RST", "cyan", [ "h-47.85", "v-211.2" ] ],
+    [ "relay1:IN", "esp1:5", "blue", [ "h-124.8", "v-144.2" ] ],
+    [ "bb1:14t.e", "esp1:25", "magenta", [ "v115.2", "h-364.8", "v-105.6" ] ],
+    [ "esp1:15", "btn1:2.l", "yellow", [ "h9.6", "v105.6", "h412.8", "v-230.4" ] ],
+    [ "btn2:2.l", "esp1:4", "purple", [ "h-19.4", "v201.6", "h-412.8", "v-144" ] ],
+    [ "esp1:18", "btn3:2.l", "cyan", [ "h-38.4", "v192", "h441.6", "v-153.6" ] ],
     [ "led1:A", "bb1:19t.d", "", [ "$bb" ] ],
     [ "led1:C", "bb1:18t.d", "", [ "$bb" ] ],
     [ "r1:1", "bb1:18t.e", "", [ "$bb" ] ],
     [ "r1:2", "bb1:18b.i", "", [ "$bb" ] ],
-    [ "r2:1", "bb1:27t.c", "", [ "$bb" ] ],
-    [ "r2:2", "bb1:21t.c", "", [ "$bb" ] ],
     [ "sw1:1", "bb1:13t.c", "", [ "$bb" ] ],
     [ "sw1:2", "bb1:14t.c", "", [ "$bb" ] ],
     [ "sw1:3", "bb1:15t.c", "", [ "$bb" ] ],
-    [ "bb1:14t.d", "r2:2", "magenta", [ "h19.2", "v-38.4", "h46.8" ] ],
-    [ "r2:1", "bb1:tn.22", "black", [ "v0" ] ]
+    [ "r2:1", "bb1:27t.c", "", [ "$bb" ] ],
+    [ "r2:2", "bb1:21t.c", "", [ "$bb" ] ],
+    [ "oled1:GND", "bb1:4t.e", "", [ "$bb" ] ],
+    [ "oled1:VCC", "bb1:5t.e", "", [ "$bb" ] ],
+    [ "oled1:SCL", "bb1:6t.e", "", [ "$bb" ] ],
+    [ "oled1:SDA", "bb1:7t.e", "", [ "$bb" ] ]
   ],
   "dependencies": {}
 }
