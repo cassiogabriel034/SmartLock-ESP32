@@ -267,7 +267,7 @@ void loop() {
                 const ConfigSistema *cfg = memoria_obter_config();
                 // Exige credencial Master para prosseguir com o reset
                 if (cfg != NULL && compararTags(&tagLida, &cfg->tagMaster)) {
-                    atualizarStatusTela("Reset?\nA:SIM V:NAO", FONTE_PADRAO);
+                    atualizarStatusTela("Reset?\nA:SI V:NO", FONTE_PADRAO);
                     estadoAtual = ESTADO_RESET;
                 } else {
                     atualizarStatusTela("Admin\nNegado", FONTE_PADRAO);
