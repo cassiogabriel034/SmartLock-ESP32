@@ -97,10 +97,14 @@ void loop() {
             if (lerTagNFC(&tagLida) == 1) {
                 // Consulta se a TAG aproximada consta no banco de dados
                 if (memoria_consulta_tag(&tagLida) == 1) {
+                    Serial.println("[NFC] TAG Ok. Permissao presente na memoria.");
+
                     atualizarStatusTela("Acesso OK", FONTE_PADRAO);
                     abrirPorta(); // Energiza o solenoide da trava elétrica
                     estadoAtual = ESTADO_TRAVA_ABERTA;
                 } else {
+                    Serial.println("[NFC] TAG negada. Permissao ausente na memoria.");
+                    
                     atualizarStatusTela("TAG Negada", FONTE_PADRAO);
                     delay(1500); // Pausa para leitura da mensagem pelo usuário
                     atualizarStatusTela("Padrao\nAprox. TAG", FONTE_PADRAO);
@@ -137,6 +141,8 @@ void loop() {
             }
             // Quando a porta for encostada/fechada novamente e o relé já estiver em repouso
             if (estaPortaFechada() && !obterEstadoTrava()) {
+                Serial.println("[FSM] Porta fechada. Retornando ao ESTADO_PADRAO.");
+
                 atualizarStatusTela("Padrao\nAprox. TAG", FONTE_PADRAO);
                 estadoAtual = ESTADO_PADRAO;
             }
