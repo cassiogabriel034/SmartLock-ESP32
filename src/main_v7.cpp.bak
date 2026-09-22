@@ -1,0 +1,333 @@
+#include <Arduino.h>
+#include "config.h"
+#include "config_structs.h"
+#include "modulo_nfc.h"
+#include "modulo_bluetooth.h"
+#include "modulo_display.h"
+#include "modulo_botoes.h"
+#include "modulo_porta.h"
+#include "modulo_memoria.h"
+
+// Objetos e Variáveis Globais
+TagNfc tagLida;
+ConfigSistema configs;
+
+// Instância dos três botões
+Botao btnBranco;   // GPIO 15 (PINO_BOTAO_VERDE - Botão de Avanço / Abertura)
+Botao btnVermelho; // GPIO 4  (PINO_BOTAO_VERMELHO - Botão de Voltar / Fechamento)
+Botao btnAzul;     // GPIO 18 (PINO_BOTAO_AZUL - Botão de Status / Pular)
+
+// Estados do Sistema
+enum EstadoSistema { 
+    SETUP_BLUETOOTH, 
+    NAVEGACAO_CONFIG, 
+    CADASTRO_TAG_MASTER,
+    MODO_OPERACIONAL, 
+    MODO_CADASTRO,
+    TRAVA_ABERTA 
+};
+
+#define fonte_tela 2
+
+EstadoSistema estadoAtual = SETUP_BLUETOOTH;
+uint8_t paginaAtual = 0;
+
+// Exibe todas as configurações recebidas de uma vez no Terminal do VS Code
+void imprimirConfigsTerminal() {
+    Serial.println(F("\n=============================================="));
+    Serial.println(F("    CONFIGURACOES RECEBIDAS VIA BLUETOOTH     "));
+    Serial.println(F("=============================================="));
+    Serial.print(F("SSID Wi-Fi   : ")); Serial.println(configs.wifi.ssid);
+    Serial.print(F("Senha Wi-Fi  : ")); Serial.println(configs.wifi.password);
+    Serial.print(F("IP Estatico  : ")); Serial.println(configs.wifi.ipEstatico);
+    Serial.print(F("Link da API  : ")); Serial.println(configs.apiLink);
+    Serial.print(F("Dash Usuario : ")); Serial.println(configs.dashboard.usuario);
+    Serial.println(F("==============================================\n"));
+}
+
+// Atualiza a tela OLED com a página de configuração correspondente (Tudo em Fonte 2)
+void exibirPaginaConfig(uint8_t pagina) {
+    switch (pagina) {
+        case 0:
+            atualizarStatusTela("Setup Ok!\nB:Avan\nV:Volt", fonte_tela);
+            break;
+        case 1:
+            atualizarStatusTela(String("[1/5] SSID:\n") + configs.wifi.ssid, fonte_tela);
+            break;
+        case 2:
+            atualizarStatusTela(String("[2/5] Senha:\n") + configs.wifi.password, fonte_tela);
+            break;
+        case 3:
+            atualizarStatusTela(String("[3/5] IP:\n") + configs.wifi.ipEstatico, fonte_tela);
+            break;
+        case 4:
+            atualizarStatusTela(String("[4/5] API:\n") + configs.apiLink, fonte_tela);
+            break;
+        case 5:
+            atualizarStatusTela(String("[5/5] Dash:\n") + configs.dashboard.usuario, fonte_tela);
+            break;
+        default:
+            break;
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+
+    // 1. Inicialização do hardware da porta e da memória local
+    inicializarPorta();
+    memoria_inicializar();
+
+    // 2. Inicializa os 3 botões do sistema[cite: 12, 19]
+    botao_inicializar(&btnBranco, PINO_BOTAO_VERDE);
+    botao_inicializar(&btnVermelho, PINO_BOTAO_VERMELHO);
+    botao_inicializar(&btnAzul, PINO_BOTAO_AZUL);
+
+    // 3. Inicializa Display e Leitor NFC
+    inicializarDisplay();
+    atualizarStatusTela("Iniciando...", fonte_tela);
+
+    if (inicializarNFC() == 1) {
+        Serial.println(F("[NFC] Hardware inicializado com sucesso."));
+    } else {
+        Serial.println(F("[NFC] ERRO de comunicação SPI!"));
+        atualizarStatusTela("ERRO: NFC", fonte_tela);
+        delay(2000);
+    }
+
+    // 4. Inicializa o Bluetooth SPP
+    if (bt_inicializar("SmartLock-Setup") == 1) {
+        Serial.println(F("[BT] Aguardando envio de configuracoes..."));
+        atualizarStatusTela("BT:\nAguardando", fonte_tela);
+    }
+}
+
+void loop() {
+    switch (estadoAtual) {
+        // --------------------------------------------------------------------
+        // ETAPA 1: Configuração via Bluetooth
+        // --------------------------------------------------------------------
+        case SETUP_BLUETOOTH: {
+            if (bt_verificar_conexao() == 1) {
+                int statusBt = bt_ler_entradas(&configs);
+
+                if (statusBt == 1) {
+                    atualizarStatusTela("BT: Dado\nRecebido", fonte_tela);
+                } 
+                else if (statusBt == 2 || configs.configurado) {
+                    imprimirConfigsTerminal();
+                    bt_desligar();
+
+                    paginaAtual = 0;
+                    exibirPaginaConfig(paginaAtual);
+                    estadoAtual = NAVEGACAO_CONFIG;
+                }
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------
+        // ETAPA 2: Navegação das Configurações na Tela (Todos os botões)
+        // --------------------------------------------------------------------
+        case NAVEGACAO_CONFIG: {
+            // Botão Branco: Avançar Página
+            if (botao_verificar_clique(&btnBranco) == 1) {
+                paginaAtual++;
+                if (paginaAtual > 5) {
+                    Serial.println(F("[SISTEMA] Navegação concluída -> Cadastro Tag Master."));
+                    atualizarStatusTela("Aproxime\nTag MASTER", fonte_tela);
+                    estadoAtual = CADASTRO_TAG_MASTER;
+                } else {
+                    exibirPaginaConfig(paginaAtual);
+                }
+            }
+
+            // Botão Vermelho: Voltar Página
+            if (botao_verificar_clique(&btnVermelho) == 1) {
+                if (paginaAtual > 0) {
+                    paginaAtual--;
+                    exibirPaginaConfig(paginaAtual);
+                }
+            }
+
+            // Botão Azul: Pular Navegação e ir direto para Operacional
+            if (botao_verificar_clique(&btnAzul) == 1) {
+                Serial.println(F("[SISTEMA] Pular menu -> Cadastro Tag Master."));
+                atualizarStatusTela("Aproxime\nTag MASTER", fonte_tela);
+                estadoAtual = CADASTRO_TAG_MASTER;
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------
+        // ETAPA 3: Modo Operacional (Aguardando Leitura NFC ou Comandos)
+        // --------------------------------------------------------------------
+        case MODO_OPERACIONAL: {
+            // Leitura NFC
+            if (lerTagNFC(&tagLida) == 1) {
+                char bufferUid[30];
+                formatarUidTexto(&tagLida, bufferUid);
+
+                Serial.print(F("[NFC] Tag Detectada! UID: "));
+                Serial.println(bufferUid);
+
+                // 1. Verifica se é a TAG Master (entra em modo cadastro)
+                if (compararTags(&tagLida, &configs.tagMaster)) {
+                    Serial.println(F("[SISTEMA] TAG Master -> Modo Cadastro."));
+                    atualizarStatusTela("ADMIN\nAprox. Tag", fonte_tela);
+                    estadoAtual = MODO_CADASTRO;
+                    break;
+                }
+
+                // 2. Verifica se a TAG está autorizada no vetor
+                if (memoria_consulta_tag(&tagLida) == 1) {
+                    abrirPorta();
+                    atualizarStatusTela(String("Autorizado!\n") + bufferUid, fonte_tela);
+                    delay(1200);
+                    atualizarStatusTela("LED: LIGADO\nFimCurso", fonte_tela);
+                    estadoAtual = TRAVA_ABERTA;
+                } else {
+                    Serial.println(F("[NFC] TAG nao autorizada!"));
+                    atualizarStatusTela(String("NEGADO!\n") + bufferUid, fonte_tela);
+                    delay(1500);
+                    atualizarStatusTela("Aproxime\na Tag", fonte_tela);
+                }
+                break;
+            }
+
+            // Botão Branco: Abertura Manual da Trava
+            if (botao_verificar_clique(&btnBranco) == 1) {
+                abrirPorta();
+                Serial.println(F("[MANUAL] Trava ABERTA via Botão Branco"));
+                atualizarStatusTela("LED: LIGADO\n(Manual)", fonte_tela);
+                estadoAtual = TRAVA_ABERTA;
+            }
+
+            // Botão Vermelho: Resetar mensagem da tela
+            if (botao_verificar_clique(&btnVermelho) == 1) {
+                atualizarStatusTela("Aproxime\na Tag", fonte_tela);
+            }
+
+            // Botão Azul: Exibir status atual do sistema
+            if (botao_verificar_clique(&btnAzul) == 1) {
+                String statusStr = "LED: OFF\nPorta: ";
+                statusStr += estaPortaFechada() ? "FECH" : "ABER";
+                atualizarStatusTela(statusStr, fonte_tela);
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------
+        // ETAPA 3.5: Cadastro da TAG Master (Admin)
+        // --------------------------------------------------------------------
+        case CADASTRO_TAG_MASTER: {
+            // Leitura NFC para definir a TAG Master do sistema
+            if (lerTagNFC(&tagLida) == 1) {
+                char bufferUid[30];
+                formatarUidTexto(&tagLida, bufferUid);
+
+                // Salva a TAG lida como Master na struct de configuração
+                copiarTag(&configs.tagMaster, &tagLida);
+
+                // Grava toda a configuração no módulo de memória
+                memoria_configurar(&configs);
+
+                Serial.print(F("[MASTER] TAG Master cadastrada: "));
+                Serial.println(bufferUid);
+
+                atualizarStatusTela(String("Master:\n") + bufferUid, fonte_tela);
+                delay(2000);
+
+                atualizarStatusTela("Aproxime\na Tag", fonte_tela);
+                estadoAtual = MODO_OPERACIONAL;
+            }
+
+            // Botão Vermelho: Pular cadastro da master (sistema sem proteção)
+            if (botao_verificar_clique(&btnVermelho) == 1) {
+                Serial.println(F("[SISTEMA] Cadastro Master pulado -> Sem protecao."));
+                memoria_configurar(&configs);
+                atualizarStatusTela("Aproxime\na Tag", fonte_tela);
+                estadoAtual = MODO_OPERACIONAL;
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------
+        // ETAPA 4.5: Modo Cadastro de TAGs (Admin apresentou a Master)
+        // --------------------------------------------------------------------
+        case MODO_CADASTRO: {
+            // Leitura NFC para cadastro/remoção (toggle automático)
+            if (lerTagNFC(&tagLida) == 1) {
+                char bufferUid[30];
+                formatarUidTexto(&tagLida, bufferUid);
+
+                // Tenta adicionar ou remover (toggle via módulo de memória)
+                int resultado = memoria_add_rmv_tag(&configs.tagMaster, &tagLida);
+
+                if (resultado == 1) {
+                    Serial.print(F("[CADASTRO] TAG adicionada: ")); Serial.println(bufferUid);
+                    atualizarStatusTela(String("ADICIONADA\n") + bufferUid, fonte_tela);
+                } else if (resultado == 0) {
+                    Serial.print(F("[CADASTRO] TAG removida: ")); Serial.println(bufferUid);
+                    atualizarStatusTela(String("REMOVIDA\n") + bufferUid, fonte_tela);
+                } else {
+                    Serial.println(F("[CADASTRO] Erro no cadastro!"));
+                    atualizarStatusTela("Erro!\nTente outra", fonte_tela);
+                }
+                delay(1500);
+                atualizarStatusTela("ADMIN\nAprox. Tag", fonte_tela);
+            }
+
+            // Botão Vermelho: Sair do modo cadastro e voltar ao operacional
+            if (botao_verificar_clique(&btnVermelho) == 1) {
+                Serial.println(F("[SISTEMA] Saindo do Modo Cadastro."));
+                atualizarStatusTela("Aproxime\na Tag", fonte_tela);
+                estadoAtual = MODO_OPERACIONAL;
+            }
+
+            // Botão Azul: Exibir quantidade de TAGs cadastradas
+            if (botao_verificar_clique(&btnAzul) == 1) {
+                String msg = "Tags:\n" + String(memoria_obter_quantidade_tags()) + "/" + String(MAX_TAGS_CADASTRADAS);
+                atualizarStatusTela(msg, fonte_tela);
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------
+        // ETAPA 5: Trava Aberta / LED Ligado (Aguardando Fim de Curso ou Botão)
+        // --------------------------------------------------------------------
+        case TRAVA_ABERTA: {
+            // 1. Encerramento Automático via Chave Fim de Curso (Porta Fechada)
+            if (estaPortaFechada()) {
+                fecharPorta(); // Desliga Relé / LED
+
+                Serial.println(F("[SENSOR] Fim de curso acionado -> Trava Fechada."));
+                atualizarStatusTela("Fechado!\nLED: OFF", fonte_tela);
+                delay(1500);
+
+                atualizarStatusTela("Aproxime\na Tag", fonte_tela);
+                estadoAtual = MODO_OPERACIONAL;
+            }
+
+            // 2. Botão Vermelho: Fechamento Manual Forçado
+            if (botao_verificar_clique(&btnVermelho) == 1) {
+                fecharPorta();
+                Serial.println(F("[MANUAL] Trava DESLIGADA via Botão Vermelho"));
+                atualizarStatusTela("Fechado!\nLED: OFF", fonte_tela);
+                delay(1200);
+
+                atualizarStatusTela("Aproxime\na Tag", fonte_tela);
+                estadoAtual = MODO_OPERACIONAL;
+            }
+
+            // 3. Botão Branco ou Azul: Exibir Status na Tela sem Fechar
+            if (botao_verificar_clique(&btnBranco) == 1 || botao_verificar_clique(&btnAzul) == 1) {
+                String statusStr = "LED: ON\nPorta: ";
+                statusStr += estaPortaFechada() ? "FECH" : "ABER";
+                atualizarStatusTela(statusStr, fonte_tela);
+            }
+            break;
+        }
+    }
+}

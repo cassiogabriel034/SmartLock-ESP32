@@ -43,26 +43,6 @@
 #define PINO_BOTAO_VERMELHO 4  // GPIO14 -> Botão Vermelho
 
 /*
- * Parametrização Global dos Barramentos (Controle de Laços)
- */
-#define QUANTIDADE_ENTRADAS 4
-#define QUANTIDADE_SAIDAS   1
-
-/*
- * Vetores de Inicialização de GPIOs
- */
-const uint8_t PINOS_ENTRADA[QUANTIDADE_ENTRADAS] = {
-    PINO_FIM_DE_CURSO,
-    PINO_BOTAO_AZUL,
-    PINO_BOTAO_VERDE,
-    PINO_BOTAO_VERMELHO
-};
-
-const uint8_t PINOS_SAIDA[QUANTIDADE_SAIDAS] = {
-    PINO_RELE_TRAVA
-};
-
-/*
  * Códigos de Retorno Padronizados (Programação Defensiva)
  */
 #define STATUS_SUCESSO         1  // Operação executada perfeitamente
