@@ -17,7 +17,7 @@ static MFRC522 mfrc522(PINO_RFID_SDA, PINO_RFID_RST);
 // Configura o barramento SPI e verifica se o hardware MFRC522 responde corretamente.
 // ============================================================================
 int8_t inicializarNFC(void) {
-    // Configura e inicia as linhas do barramento SPI (SCK: 18, MISO: 19, MOSI: 23, SS: 5)
+    // Configura e inicia as linhas do barramento SPI (SCK, MISO, MOSI, SS)
     SPI.begin(PINO_RFID_SCK, PINO_RFID_MISO, PINO_RFID_MOSI, PINO_RFID_SDA);
     
     // Envia o sinal de reset e inicialização lógica do leitor
@@ -45,13 +45,23 @@ int8_t lerTagNFC(TagNfc *tagSaida) {
     // Teste de integridade do hardware
     byte versao = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
     
-    // Se o leitor travou devido ao acionamento do relé (retornando 0x00 ou 0xFF), força o re-init do RFID
+    // Se o leitor travou devido ao surto indutivo da fechadura (retornando 0x00 ou 0xFF)
     if (versao == 0x00 || versao == 0xFF) {
+        Serial.println(F("Aviso: Ruído detectado. Reiniciando barramento SPI..."));
+        
+        // Finaliza o barramento SPI travado para limpar registradores internos
+        SPI.end();
+        delay(15);
+        
+        // Inicializa as linhas físicas do SPI do zero com os pinos do config.h
+        SPI.begin(PINO_RFID_SCK, PINO_RFID_MISO, PINO_RFID_MOSI, PINO_RFID_SDA);
         mfrc522.PCD_Init();
-        delay(50);
+        delay(40);
+        
+        // Faz uma contraprova de leitura após a limpeza do barramento
         versao = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
         if (versao == 0x00 || versao == 0xFF) {
-            return -1; // Leitor realmente desconectado
+            return -1; // Se persistir, o leitor foi realmente desconectado
         }
     }
 
@@ -85,13 +95,8 @@ int8_t lerTagNFC(TagNfc *tagSaida) {
 // Compara o conteúdo e o tamanho de duas estruturas de tags NFC.
 // ============================================================================
 bool compararTags(const TagNfc *tagA, const TagNfc *tagB) {
-    // Valida se os ponteiros são válidos
     if (tagA == NULL || tagB == NULL) return false;
-    
-    // Se o comprimento em bytes for diferente, as tags não são iguais
     if (tagA->tamanho != tagB->tamanho) return false;
-
-    // Compara o bloco de memória byte a byte; retorna true apenas se forem exatamente idênticos
     return (memcmp(tagA->bytes, tagB->bytes, tagA->tamanho) == 0);
 }
 
@@ -100,10 +105,7 @@ bool compararTags(const TagNfc *tagA, const TagNfc *tagB) {
 // Duplica os dados de uma estrutura TagNfc de origem para uma de destino.
 // ============================================================================
 void copiarTag(TagNfc *destino, const TagNfc *origem) {
-    // Proteção contra ponteiros nulos
     if (destino == NULL || origem == NULL) return;
-
-    // Copia o tamanho do UID e transfere o bloco de bytes na memória
     destino->tamanho = origem->tamanho;
     memcpy(destino->bytes, origem->bytes, origem->tamanho);
 }
@@ -113,25 +115,16 @@ void copiarTag(TagNfc *destino, const TagNfc *origem) {
 // Converte os bytes brutos do UID em uma String formato hexadecimal legível (ex: "4A 2B 3C").
 // ============================================================================
 void formatarUidTexto(const TagNfc *tag, char *bufferTexto) {
-    // Proteção contra ponteiros inválidos
     if (tag == NULL || bufferTexto == NULL) return;
 
     String stringHexadecimal = "";
 
-    // Varre cada byte do UID convertendo para representação ASCII em formato hexadecimal
     for (uint8_t i = 0; i < tag->tamanho; i++) {
-        // Insere o caractere '0' à esquerda para manter a formatação de 2 dígitos em valores menores que 0x10
         if (tag->bytes[i] < 0x10) stringHexadecimal += "0";
-        
         stringHexadecimal += String(tag->bytes[i], HEX);
-        
-        // Adiciona um espaço delimitador entre os bytes (exceto no último)
         if (i < tag->tamanho - 1) stringHexadecimal += " ";
     }
     
-    // Converte todas as letras do texto para maiúsculas (ex: "4a" -> "4A")
     stringHexadecimal.toUpperCase();
-
-    // Copia com segurança a cadeia de caracteres gerada para o buffer de destino passado pelo chamador
     strcpy(bufferTexto, stringHexadecimal.c_str());
 }
