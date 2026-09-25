@@ -4,7 +4,7 @@
  * Arquivo: main.cpp
  * Descrição: Arquivo principal de execução do protótipo. Implementa a lógica 
  *            de controle baseada em Máquina de Estados Finitos (FSM)
- *            assíncrona, gerenciando a leitura NFC/RFID, botoes físicos,
+ *            assíncrona, gerenciando a leitura NFC/RFID, botões físicos,
  *            display OLED, controle da trava elétrica, persistência de dados
  *            e comunicação Bluetooth/Wi-Fi.
  * ============================================================================
@@ -72,7 +72,7 @@ void setup() {
     botao_inicializar(&btnBranco, PINO_BOTAO_VERDE);
     botao_inicializar(&btnVermelho, PINO_BOTAO_VERMELHO);
 
-    // Mensagem de boas-vindas no display OLED e no log serial - OTIMIZADO FONTE 2
+    // Mensagem de boas-vindas no display OLED e no log serial
     atualizarStatusTela("Padrao\nAprox. TAG", FONTE_PADRAO); 
     Serial.println("Sistema iniciado. Estado: ESTADO_PADRAO");
 }
@@ -90,11 +90,12 @@ void loop() {
     switch (estadoAtual) {
         
         // --------------------------------------------------------------------
-        // ESTADO 1: MODO PADRÃO (Aguardando uso routineiro ou navegação)
+        // ESTADO 1: MODO PADRÃO (Aguardando uso rotineiro ou navegação)
         // --------------------------------------------------------------------
         case ESTADO_PADRAO: {
-            // Tenta efetuar a leitura de uma TAG no campo de radiofrequência
-            if (lerTagNFC(&tagLida) == 1) {
+            int8_t statusNFC = lerTagNFC(&tagLida);
+            
+            if (statusNFC == 1) {
                 // Consulta se a TAG aproximada consta no banco de dados
                 if (memoria_consulta_tag(&tagLida) == 1) {
                     Serial.println("[NFC] TAG Ok. Permissao presente na memoria.");
@@ -109,6 +110,9 @@ void loop() {
                     delay(1500); // Pausa para leitura da mensagem pelo usuário
                     atualizarStatusTela("Padrao\nAprox. TAG", FONTE_PADRAO);
                 }
+            } 
+            else if (statusNFC == -1) {
+                Serial.println("[NFC] Erro: Leitor MFRC522 desconectado ou com falha de comunicacao!");
             }
 
             // Tratamento dos acionamentos por botão físico no Modo Padrão
@@ -158,14 +162,6 @@ void loop() {
             
             // Retorno '2' indica que a transmissão das configurações foi finalizada com sucesso
             if (statusBt == 2) {
-                /* 
-                 * NOTA DE INTEGRAÇÃO:
-                 * A chamada 'wifi_conectar_ip_fixo' permanece desativada temporariamente.
-                 * Redes institucionais/acadêmicas possuem autenticação WPA2-Enterprise 
-                 * ou isolamento de clientes (AP Isolation), o que impede a validação direta.
-                 */
-                // wifi_conectar_ip_fixo(&cfgS.wifi);
-                
                 bt_desligar(); // Desativa o rádio Bluetooth para economizar RAM/energia
                 estadoAtual = ESTADO_SOLICITAR_TAG_ADMIN_BT;
                 atualizarStatusTela("Cad. TAG\nAdmin", FONTE_PADRAO);
@@ -181,11 +177,12 @@ void loop() {
         }
 
         // --------------------------------------------------------------------
-        // ESTADO 4: CADASTRO DE TAG ADMINISTRATORIA (Pós-Bluetooth)
+        // ESTADO 4: CADASTRO DE TAG ADMINISTRATIVA (Pós-Bluetooth)
         // --------------------------------------------------------------------
         case ESTADO_SOLICITAR_TAG_ADMIN_BT: {
-            // Aguarda a leitura da TAG que será registrada como Master/Admin
-            if (lerTagNFC(&tagLida) == 1) {
+            int8_t statusNFC = lerTagNFC(&tagLida);
+
+            if (statusNFC == 1) {
                 copiarTag(&cfgS.tagMaster, &tagLida);
                 memoria_configurar(&cfgS); // Grava a estrutura de configuração na memória
 
@@ -193,6 +190,9 @@ void loop() {
                 delay(1500);
                 atualizarStatusTela("Padrao\nAprox. TAG", FONTE_PADRAO);
                 estadoAtual = ESTADO_PADRAO;
+            }
+            else if (statusNFC == -1) {
+                Serial.println("[NFC] Erro: Leitor MFRC522 desconectado ou com falha de comunicacao!");
             }
 
             // Aborta a operação caso o usuário pressione o Botão Vermelho
@@ -207,7 +207,9 @@ void loop() {
         // ESTADO 5: AUTENTICAÇÃO ADMINISTRATIVA PARA GERENCIAR TAGS
         // --------------------------------------------------------------------
         case ESTADO_GERENCIAR_TAG: {
-            if (lerTagNFC(&tagLida) == 1) {
+            int8_t statusNFC = lerTagNFC(&tagLida);
+
+            if (statusNFC == 1) {
                 const ConfigSistema *cfg = memoria_obter_config();
                 // Valida se a TAG lida corresponde à TAG Master cadastrada
                 if (cfg != NULL && compararTags(&tagLida, &cfg->tagMaster)) {
@@ -220,6 +222,9 @@ void loop() {
                     estadoAtual = ESTADO_PADRAO;
                 }
             } 
+            else if (statusNFC == -1) {
+                Serial.println("[NFC] Erro: Leitor MFRC522 desconectado ou com falha de comunicacao!");
+            }
             
             // Aborta a operação caso o botão vermelho seja pressionado
             if (cliqueVermelho == 1) {
@@ -233,7 +238,9 @@ void loop() {
         // ESTADO 6: CADASTRO / REMOÇÃO DE TAGS SECUNDÁRIAS (TOGGLE)
         // --------------------------------------------------------------------
         case ESTADO_AGUARDAR_NOVA_TAG: {
-            if (lerTagNFC(&tagLida) == 1) {
+            int8_t statusNFC = lerTagNFC(&tagLida);
+
+            if (statusNFC == 1) {
                 const ConfigSistema *cfg = memoria_obter_config();
                 if (cfg != NULL) {
                     // Se a TAG já existir, é removida; se não existir, é adicionada
@@ -250,6 +257,9 @@ void loop() {
                 atualizarStatusTela("Padrao\nAprox. TAG", FONTE_PADRAO);
                 estadoAtual = ESTADO_PADRAO;
             }
+            else if (statusNFC == -1) {
+                Serial.println("[NFC] Erro: Leitor MFRC522 desconectado ou com falha de comunicacao!");
+            }
 
             // Aborta a operação se o botão vermelho for pressionado
             if (cliqueVermelho == 1) {
@@ -263,7 +273,9 @@ void loop() {
         // ESTADO 7: SOLICITAÇÃO DE TAG ADMIN PARA RESET DE FÁBRICA
         // --------------------------------------------------------------------
         case ESTADO_RESET_CONFIRMAR: {
-            if (lerTagNFC(&tagLida) == 1) {
+            int8_t statusNFC = lerTagNFC(&tagLida);
+
+            if (statusNFC == 1) {
                 const ConfigSistema *cfg = memoria_obter_config();
                 // Exige credencial Master para prosseguir com o reset
                 if (cfg != NULL && compararTags(&tagLida, &cfg->tagMaster)) {
@@ -275,6 +287,9 @@ void loop() {
                     atualizarStatusTela("Padrao\nAprox. TAG", FONTE_PADRAO);
                     estadoAtual = ESTADO_PADRAO;
                 }
+            }
+            else if (statusNFC == -1) {
+                Serial.println("[NFC] Erro: Leitor MFRC522 desconectado ou com falha de comunicacao!");
             }
 
             // Cancela o fluxo de reset

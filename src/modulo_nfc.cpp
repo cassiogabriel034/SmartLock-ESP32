@@ -8,8 +8,10 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
+// Frequência reduzida do SPI (1 MHz) para imunidade a ruídos em cabos compridos
+#define FREQUENCIA_SPI_NFC 1000000 
+
 // Instanciação estática do driver MFRC522 utilizando as macros de pinagem do config.h.
-// PINO_RFID_SDA (CS/SS) e PINO_RFID_RST (Reset por hardware).
 static MFRC522 mfrc522(PINO_RFID_SDA, PINO_RFID_RST);
 
 // ============================================================================
@@ -20,11 +22,13 @@ int8_t inicializarNFC(void) {
     // Configura e inicia as linhas do barramento SPI (SCK, MISO, MOSI, SS)
     SPI.begin(PINO_RFID_SCK, PINO_RFID_MISO, PINO_RFID_MOSI, PINO_RFID_SDA);
     
+    // Reduz a velocidade do barramento no ESP32 para estabilizar sinais em fios compridos
+    SPI.setFrequency(FREQUENCIA_SPI_NFC);
+    
     // Envia o sinal de reset e inicialização lógica do leitor
     mfrc522.PCD_Init();
 
-    // Valida se o chip físico responde lendo o registrador de versão interna.
-    // Se retornar 0x00 ou 0xFF, significa falha física (mau contato, fiação solta ou pino incorreto).
+    // Valida se o chip físico responde lendo o registrador de versão interna
     byte versao = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
     if (versao == 0x00 || versao == 0xFF) {
         Serial.println(F("ERRO: Falha de comunicacao com o leitor RFID MFRC522!"));
@@ -42,27 +46,26 @@ int8_t inicializarNFC(void) {
 int8_t lerTagNFC(TagNfc *tagSaida) {
     if (tagSaida == NULL) return -1;
 
-    // Teste de integridade do hardware
+    // 1. Teste de integridade do hardware (SPI)
     byte versao = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
-    
-    // Se o leitor travou devido ao surto indutivo da fechadura (retornando 0x00 ou 0xFF)
     if (versao == 0x00 || versao == 0xFF) {
-        Serial.println(F("Aviso: Ruído detectado. Reiniciando barramento SPI..."));
-        
-        // Finaliza o barramento SPI travado para limpar registradores internos
+        Serial.println(F("Aviso: Barramento SPI travado. Reiniciando..."));
         SPI.end();
         delay(15);
-        
-        // Inicializa as linhas físicas do SPI do zero com os pinos do config.h
         SPI.begin(PINO_RFID_SCK, PINO_RFID_MISO, PINO_RFID_MOSI, PINO_RFID_SDA);
+        SPI.setFrequency(FREQUENCIA_SPI_NFC);
         mfrc522.PCD_Init();
         delay(40);
-        
-        // Faz uma contraprova de leitura após a limpeza do barramento
         versao = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
-        if (versao == 0x00 || versao == 0xFF) {
-            return -1; // Se persistir, o leitor foi realmente desconectado
-        }
+        if (versao == 0x00 || versao == 0xFF) return -1;
+    }
+
+    // 2. Proteção contra desativação de antena por ruído indutivo
+    byte txControl = mfrc522.PCD_ReadRegister(MFRC522::TxControlReg);
+    if ((txControl & 0x03) != 0x03) {
+        Serial.println(F("[NFC] Antena desligada por ruido. Reativando leitor..."));
+        mfrc522.PCD_Init();      // Reinicializa registradores e reativa a antena
+        mfrc522.PCD_AntennaOn();
     }
 
     // Checa se há uma nova tag no campo
@@ -70,7 +73,6 @@ int8_t lerTagNFC(TagNfc *tagSaida) {
         return 0;
     }
 
-    // Tenta ler o código serial da tag
     if (!mfrc522.PICC_ReadCardSerial()) {
         return 0;
     }
@@ -83,7 +85,6 @@ int8_t lerTagNFC(TagNfc *tagSaida) {
     tagSaida->tamanho = tamanhoLido;
     memcpy(tagSaida->bytes, mfrc522.uid.uidByte, tamanhoLido);
 
-    // Encerra a comunicação da tag e reseta a criptografia do chip
     mfrc522.PICC_HaltA();
     mfrc522.PCD_StopCrypto1();
 
@@ -92,7 +93,6 @@ int8_t lerTagNFC(TagNfc *tagSaida) {
 
 // ============================================================================
 // FUNÇÃO: compararTags
-// Compara o conteúdo e o tamanho de duas estruturas de tags NFC.
 // ============================================================================
 bool compararTags(const TagNfc *tagA, const TagNfc *tagB) {
     if (tagA == NULL || tagB == NULL) return false;
@@ -102,7 +102,6 @@ bool compararTags(const TagNfc *tagA, const TagNfc *tagB) {
 
 // ============================================================================
 // FUNÇÃO: copiarTag
-// Duplica os dados de uma estrutura TagNfc de origem para uma de destino.
 // ============================================================================
 void copiarTag(TagNfc *destino, const TagNfc *origem) {
     if (destino == NULL || origem == NULL) return;
@@ -112,7 +111,6 @@ void copiarTag(TagNfc *destino, const TagNfc *origem) {
 
 // ============================================================================
 // FUNÇÃO: formatarUidTexto
-// Converte os bytes brutos do UID em uma String formato hexadecimal legível (ex: "4A 2B 3C").
 // ============================================================================
 void formatarUidTexto(const TagNfc *tag, char *bufferTexto) {
     if (tag == NULL || bufferTexto == NULL) return;
